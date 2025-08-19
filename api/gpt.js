@@ -1,6 +1,6 @@
 // api/gpt.js
 export default async function handler(req, res) {
-  // --- CORS (универсально, в т.ч. для origin=null) ---
+  // --- CORS ---
   const origin = req.headers.origin || "*";
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
@@ -8,20 +8,28 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Max-Age", "86400");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  // ----------------------------------------------------
+  // -------------
 
-  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Use POST" });
+  }
 
   try {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY is missing" });
+    if (!apiKey) {
+      return res.status(500).json({ error: "OPENAI_API_KEY is missing on server" });
+    }
 
     const { prompt = "", context = {} } = req.body || {};
-    const sys = "Ты помощник юркомпании по списанию долгов. Отвечай кратко, по чек-листам, без гарантий результата.";
+    const sys =
+      "Ты помощник юркомпании по списанию долгов. Отвечай кратко, по чек-листам, без гарантий результата.";
 
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.3,
@@ -32,10 +40,20 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await r.json();
+    const data = await upstream.json().catch(() => ({}));
+
+    // Если OpenAI вернул ошибку — покажем её прямо клиенту
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({
+        error: data?.error?.message || "Upstream error",
+        details: data
+      });
+    }
+
     const text = (data?.choices?.[0]?.message?.content || "").trim();
     return res.status(200).json({ text });
   } catch (e) {
     return res.status(500).json({ error: String(e) });
   }
 }
+
