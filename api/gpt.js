@@ -1,15 +1,17 @@
 // api/gpt.js
 export default async function handler(req, res) {
-  // --- CORS ---
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // --- CORS (универсально, в т.ч. для origin=null) ---
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Max-Age", "86400");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  // -------------
+  // ----------------------------------------------------
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Use POST" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY is missing" });
@@ -19,10 +21,7 @@ export default async function handler(req, res) {
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.3,
@@ -40,4 +39,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: String(e) });
   }
 }
-
